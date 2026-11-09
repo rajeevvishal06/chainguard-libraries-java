@@ -5,7 +5,12 @@
 
   <servers>
     <server>
-      <id>chainguard-libs</id>
+      <id>chainguard-remediated</id>
+      <username>${env.CGR_MAVEN_USER}</username>
+      <password>${env.CGR_MAVEN_PASS}</password>
+    </server>
+    <server>
+      <id>chainguard-java</id>
       <username>${env.CGR_MAVEN_USER}</username>
       <password>${env.CGR_MAVEN_PASS}</password>
     </server>
@@ -15,10 +20,18 @@
     <profile>
       <id>chainguard-libraries</id>
       <repositories>
-        <!-- 1️⃣ Chainguard Maven repo (first priority) -->
+        <!-- 1️⃣ Chainguard Remediated Java repo (first priority) -->
         <repository>
-          <id>chainguard-libs</id>
-          <url>https://libraries.cgr.dev/maven/</url>
+          <id>chainguard-remediated</id>
+          <url>https://libraries.cgr.dev/java-remediated/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+
+        <!-- 1️⃣ Chainguard Java repo (second priority) -->
+        <repository>
+          <id>chainguard-java</id>
+          <url>https://libraries.cgr.dev/java/</url>
           <releases><enabled>true</enabled></releases>
           <snapshots><enabled>false</enabled></snapshots>
         </repository>
@@ -26,11 +39,39 @@
         <!-- 2️⃣ Maven Central fallback -->
         <repository>
           <id>central</id>
-          <url>https://repo1.maven.org/maven2</url>
+          <url>invalid</url>
           <releases><enabled>true</enabled></releases>
           <snapshots><enabled>false</enabled></snapshots>
         </repository>
       </repositories>
+
+      <!-- Plugins and their dependencies (e.g. spring-core for spring-boot:repackage)
+           resolve through pluginRepositories, not repositories -->
+      <pluginRepositories>
+        <!-- 1️⃣ Chainguard Remediated Java repo (first priority) -->
+        <pluginRepository>
+          <id>chainguard-remediated</id>
+          <url>https://libraries.cgr.dev/java-remediated/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+
+        <!-- 1️⃣ Chainguard Java repo (second priority) -->
+        <pluginRepository>
+          <id>chainguard-java</id>
+          <url>https://libraries.cgr.dev/java/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+
+        <!-- 2️⃣ Maven Central fallback for plugins not available from Chainguard -->
+        <pluginRepository>
+          <id>central</id>
+          <url>invalid</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+      </pluginRepositories>
     </profile>
   </profiles>
 

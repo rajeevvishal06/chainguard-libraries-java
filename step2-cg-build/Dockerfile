@@ -1,11 +1,11 @@
-ARG BUILDER_IMAGE="maven"
-ARG RUNTIME_IMAGE="eclipse-temurin"
+ARG BUILDER_IMAGE="cgr.dev/chainguard-private/maven:latest-dev"
+ARG RUNTIME_IMAGE="cgr.dev/chainguard-private/jre"
 
 FROM ${BUILDER_IMAGE} AS builder
 WORKDIR /work
 
 # Define a build argument with a default value for upstream maven image
-ARG MAVEN_SETTINGS_PATH=/usr/share/maven/conf/settings.xml
+ARG MAVEN_SETTINGS_PATH=/usr/share/java/maven/conf/settings.xml
 ENV MAVEN_SETTINGS_PATH=${MAVEN_SETTINGS_PATH}
 
 # update mvn settings.xml
