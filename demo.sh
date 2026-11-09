@@ -29,7 +29,7 @@ To keep everything portable and reproducible, the demo uses containerized builds
 
 The application is a simple Java Spring Boot application that returns a string when a post is sent.
 
-The demo includes three main stages:
+The demo includes two main stages:
 1. Baseline Build (Upstream Maven & Temurin Images):
    - Build the Java application using upstream Maven build containers and an Eclipse Temurin runtime container.
    - This represents a typical Java build pipeline that relies on Maven Central for dependencies.
@@ -39,12 +39,6 @@ The demo includes three main stages:
    - Rebuild the same application using Chainguard Libraries for Java, keeping the same upstream Maven and Temurin containers.
    - Demonstrate that switching dependency sources has no impact on functionality.
    - Re-scan the image to show that dependencies are now covered by Chainguard’s verified library set.
-
-3. Chainguard Build & Runtime Containers:
-   - Rebuild and run the application using both Chainguard’s build and runtime container images together with Chainguard Libraries.
-   - Perform a final scan to confirm full coverage from Chainguard’s trusted ecosystem and show that the application still functions as expected.
-
-4. Lastly we will look at how to view provenance for Chainguard Libraries for Java. We will look at an SBOM for one of the dependencies and discuss some key attributes.
 
 Let's get started!
 "
@@ -152,59 +146,11 @@ pei "# Stop the running container and remove the local jar file:"
 pei 'docker stop java-lib-example-1 && docker rm java-lib-example-1 && rm java-demo-app-1.0.0.jar'
 
 ###############################################################################
-# Step 3: Build Fully Chainguard (Image + Libraries)
-###############################################################################
-banner "Step 3: Full Chainguard Build (Chainguard Java images + Chainguard Libraries for Java)"
-pei "# In this step we will use the same app but this time we will build with Chainguard libraries, using the Chainguard maven image and jre runtime."
-pe '# Now lets set our tag, builder and runtime image and build the same app as before but using chainguard libraries.'
-pei "TAG=\"chainguard-cg-libs\""
-pei "BUILDER_IMAGE=\"cgr.dev/chainguard/maven:latest\""
-pei "RUNTIME_IMAGE=\"cgr.dev/chainguard/jre:latest\""
-pei "MAVEN_SETTINGS_PATH=\"/usr/share/java/maven/conf/settings.xml\""
-
-pei "# For this build we will use the same settings.xml and pom.xml file as in the previous step."
-pe "docker build \
-  -t java-lib-example:\$TAG \
-  --build-arg BUILDER_IMAGE=\$BUILDER_IMAGE \
-  --build-arg RUNTIME_IMAGE=\$RUNTIME_IMAGE \
-  --build-arg MAVEN_SETTINGS_PATH=\$MAVEN_SETTINGS_PATH \
-  --secret id=cgr_user,src=<(echo -n \"\$CGR_MAVEN_USER\") \
-  --secret id=cgr_pass,src=<(echo -n \"\$CGR_MAVEN_PASS\") \
-  -f ../step2-cg-build/Dockerfile ."
-
-p "# Run the container and test it."
-pei 'docker run -d -p 8081:8080 --name java-lib-example-1 java-lib-example:$TAG'
-pe 'curl http://localhost:8081'
-pei ""
-
-p "# Copy the built jar file from the container locally so we can scan it with chainctl."
-pei 'docker cp java-lib-example-1:/app/java-demo-app-1.0.0.jar .'
-
-p "# Analyze the image and jar with chainctl."
-pei 'chainctl libraries verify --parent $ORG_NAME java-demo-app-1.0.0.jar'
-
-p "# Cleanup: Stop the container and delete the jar."
-pei 'docker stop java-lib-example-1 && docker rm java-lib-example-1 && rm java-demo-app-1.0.0.jar'
-
-###############################################################################
-# Step 4. Provenance
-###############################################################################
-banner "Step 4: View Java Library Provenance"
-pei "# Each Java dependency built by Chainguard is accompanied by an SBOM, the SBOMs are published alongside each artifact as an SPDX JSON file named artifactId-version.spdx.json in the Chainguard Maven Repository."
-pei '# chainctl compares the package checksum with the one listed in the SBOM to determine if the package was built by Chainguard or not. Lets take a look at the SBOM for the spring-boot-starter-web dependency, we will start by downloading the SBOM from the Chainguard Maven repository:'
-pei "curl -L --user \"\$CGR_MAVEN_USER:\$CGR_MAVEN_PASS\" \
-  -O https://libraries.cgr.dev/java/org/springframework/boot/spring-boot-starter-web/3.3.5/spring-boot-starter-web-3.3.5.spdx.json"
-pei '# Now lets take a look at the relevant section of the SBOM:'
-pe "jq '{spdxVersion, dataLicense, SPDXID, name, documentNamespace, creationInfo, packages: [.packages[0]]}' spring-boot-starter-web-3.3.5.spdx.json | jq ."
-pei ""
-
-###############################################################################
 # Final Cleanup
 ###############################################################################
 banner "Final cleanup delete local files and delete the Chainguard pull token"
 pei "ID=\$(chainctl iam ids ls --parent=\"\${ORG_NAME}\" -o json | jq -r --arg name \"\${TOKEN_NAME}\" '.items[] | select(.name | startswith(\$name)) | .id')"
 pei 'chainctl iam identities delete "$ID" --parent "$ORG_NAME" --yes'
-pei 'rm spring-boot-starter-web-3.3.5.spdx.json'
 
 p "# Demo complete!"
 exit 0
