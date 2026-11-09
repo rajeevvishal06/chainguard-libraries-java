@@ -120,6 +120,7 @@ pe '# Now lets set our tag, builder and runtime image and build the same app as 
 pei "TAG=\"upstream-cg-libs\""
 pei "BUILDER_IMAGE=\"maven\""
 pei "RUNTIME_IMAGE=\"eclipse-temurin\""
+pei "MAVEN_SETTINGS_PATH=\"/usr/share/maven/conf/settings.xml\""
 
 pe "# Lets take a look at the dockerfile as it is slightly different from before, notice that we will be passing in our credentials as build secrets so that they are not stored in the layers or in the builder logs:"
 pei 'cat ../step2-cg-build/Dockerfile'
@@ -130,6 +131,7 @@ pe "docker build \
   -t java-lib-example:\$TAG \
   --build-arg BUILDER_IMAGE=\$BUILDER_IMAGE \
   --build-arg RUNTIME_IMAGE=\$RUNTIME_IMAGE \
+  --build-arg MAVEN_SETTINGS_PATH=\$MAVEN_SETTINGS_PATH \
   --secret id=cgr_user,src=<(echo -n \"\$CGR_MAVEN_USER\") \
   --secret id=cgr_pass,src=<(echo -n \"\$CGR_MAVEN_PASS\") \
   -f ../step2-cg-build/Dockerfile ."
