@@ -19,14 +19,6 @@
     - [5. Build using Chainguard Libraries](#5-build-using-chainguard-libraries)
     - [6. Run, test, and scan](#6-run-test-and-scan)
     - [7. Cleanup](#7-cleanup-1)
-  - [🧱 Step 3 — Full Chainguard Build](#-step-3--full-chainguard-build)
-    - [1. Set variables](#1-set-variables)
-    - [2. Build with Chainguard Maven and JRE](#2-build-with-chainguard-maven-and-jre)
-    - [3. Run and test](#3-run-and-test)
-    - [4. Scan with chainctl](#4-scan-with-chainctl)
-    - [5. Cleanup](#5-cleanup)
-  - [🧱 Step 4 — Java Library Provenance](#-step-4--java-library-provenance)
-    - [1. View Java library provenance](#1-view-java-library-provenance)
   - [🧹 Final Cleanup](#-final-cleanup)
   - [🧩 Troubleshooting Tips](#-troubleshooting-tips)
 
@@ -34,8 +26,6 @@
 This walkthrough demonstrates:
 1. How to rebuild an existing Java application using Chainguard’s verified Maven repository.
 2. How to compare dependency sourcing before and after migration.
-3. How to build and scan the application using Chainguard's dev and runtime containers.
-4. How to view provenance data for Chainguard Java Libraries
 
 **Note:** To run the guided demo magic script instead of following this readme, simply execute the `demo.sh` script in this directory.
 
@@ -43,19 +33,13 @@ This walkthrough demonstrates:
 
 ## 🧩 Overview
 
-We’ll work through three main stages:
+We’ll work through two main stages:
 
 1. **Baseline Build (Upstream Maven & Temurin Images):**  
    Build an existing Java app using upstream Maven and Eclipse Temurin images with dependencies from Maven Central.
 
 2. **Chainguard Libraries Migration (Same Upstream Builders):**  
    Build the same app using Chainguard Libraries for dependencies, while keeping the same upstream Maven and Temurin images.
-
-3. **Chainguard Build & Runtime Containers:**  
-   Fully rebuild using Chainguard dev and runtime containers with Chainguard Libraries.
-
-4. **View Provenance for Chainguard Java Libraries:**  
-   Demonstrate how to view Provenance details for Chainguard Java Libraries.
 
 For this demo all builds will use **containerized environments** to avoid needing to have a local Maven.
 
@@ -241,90 +225,6 @@ chainctl libraries verify --parent $ORG_NAME java-demo-app-1.0.0.jar
 ```bash
 # Stop and remove the container, then delete the JAR file.
 docker stop java-lib-example-1 && docker rm java-lib-example-1 && rm java-demo-app-1.0.0.jar
-```
-
----
-
-## 🧱 Step 3 — Full Chainguard Build
-This stage runs the full “secure supply chain” build: using Chainguard’s Maven image as the builder and Chainguard’s JRE as the runtime.
-The result is an application where the entire toolchain — builder, runtime, and dependencies — comes from Chainguard.
-There is no separate step3 folder: this step reuses `step2-cg-build/Dockerfile` from the `step1-orig` directory, changing only the builder and runtime images through build args.
-
-### 1. Set variables
-When using the Chainguard Maven image we copy the settings.xml file to a different path from the runtime image due to the difference of where the default settings.xml file lives in the Chainguard Maven image.
-
-```bash
-# Use Chainguard's Maven and JRE images for builder and runtime.
-TAG="chainguard-cg-libs"
-BUILDER_IMAGE="cgr.dev/chainguard/maven:latest"
-RUNTIME_IMAGE="cgr.dev/chainguard/jre:latest"
-MAVEN_SETTINGS_PATH="/usr/share/java/maven/conf/settings.xml"
-
-```
-
-### 2. Build with Chainguard Maven and JRE
-
-```bash
-# Build the app using Chainguard’s Maven builder and JRE runtime images.
-docker build \
-  -t java-lib-example:$TAG \
-  --build-arg BUILDER_IMAGE=$BUILDER_IMAGE \
-  --build-arg RUNTIME_IMAGE=$RUNTIME_IMAGE \
-  --build-arg MAVEN_SETTINGS_PATH=$MAVEN_SETTINGS_PATH \
-  --secret id=cgr_user,src=<(echo -n "$CGR_MAVEN_USER") \
-  --secret id=cgr_pass,src=<(echo -n "$CGR_MAVEN_PASS") \
-  -f ../step2-cg-build/Dockerfile .
-
-```
-
-### 3. Run and test
-
-```bash
-# Start the app using the Chainguard-built container.
-docker run -d -p 8081:8080 --name java-lib-example-1 java-lib-example:$TAG
-sleep 3
-curl http://localhost:8081
-
-# Copy the JAR so that we can scan it with chainctl.
-docker cp java-lib-example-1:/app/java-demo-app-1.0.0.jar .
-```
-
-### 4. Scan with chainctl
-
-Re-scan the jar with chainctl, this should reveal the same results as the previous scan.
-
-```bash
-# Scan with chainctl to determine dependency coverage sourced from Chainguard.
-chainctl libraries verify --parent $ORG_NAME java-demo-app-1.0.0.jar
-```
-
-### 5. Cleanup
-
-```bash
-docker stop java-lib-example-1 && docker rm java-lib-example-1 && rm java-demo-app-1.0.0.jar
-```
----
-
-## 🧱 Step 4 — Java Library Provenance
-### 1. View Java library provenance
-
-Each Java library built by Chainguard is accompanied by an SBOM, the SBOMs are published alongside each artifact as an SPDX JSON file named artifactId-version.spdx.json in the Chainguard Maven Repository. The related files for Chainguard Libraries for Java are located in the same location as the .pom, .jar, and other artifacts for a specific library version. For example, the file location for artifactId spring-boot-starter-web and version 3.3.5 is
-
-`https://libraries.cgr.dev/java/org/springframework/boot/spring-boot-starter-web/3.3.5/.`.
-
-Inspect provenance for a specific package, note that the SBOM indicates that the dependency was built by Chainguard, and the git url and commit hash can be verified.
-
-Download the SBOM for the spring-boot-starter-web library:
-
-```bash
-curl -L --user "$CGR_MAVEN_USER:$CGR_MAVEN_PASS" \
-  -O https://libraries.cgr.dev/java/org/springframework/boot/spring-boot-starter-web/3.3.5/spring-boot-starter-web-3.3.5.spdx.json
-```
-
-View the SBOM file, **Note:** We will use a jq query to only print what we want to look at:
-
-```bash
-jq '{spdxVersion, dataLicense, SPDXID, name, documentNamespace, creationInfo, packages: [.packages[0]]}' spring-boot-starter-web-3.3.5.spdx.json | jq .
 ```
 
 ---
