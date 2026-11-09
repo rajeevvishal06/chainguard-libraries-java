@@ -64,11 +64,11 @@ For this demo all builds will use **containerized environments** to avoid needin
 ## 🧰 Prerequisites
 
 - **chainctl** is installed and user has access to the chainguard org with java ecosystem entitlements. 
-> NOTE: The user must have the `libraries.java.pull` role in order to access libraries from `https://libraries.cgr.dev/maven/` e.g. `owner` role. Chainctl install docs can be found [here](https://edu.chainguard.dev/chainguard/chainctl-usage/how-to-install-chainctl/)
+> NOTE: The user must have the `libraries.java.pull` role in order to access libraries from `https://libraries.cgr.dev/java/` and `https://libraries.cgr.dev/java-remediated/` e.g. `owner` role. Chainctl install docs can be found [here](https://edu.chainguard.dev/chainguard/chainctl-usage/how-to-install-chainctl/)
 - **chainctl** CLI tool to scan artifacts.  chainctl install docs can be found [here](https://edu.chainguard.dev/chainguard/chainctl-usage/how-to-install-chainctl/)
 - **jq** installed for JSON parsing  
 - A **Chainguard organization name** (e.g. `myorg.com`) that has Java ecosystem entitlements. 
-- Network Access to `https://libraries.cgr.dev/maven/`
+- Network Access to `https://libraries.cgr.dev/java/` and `https://libraries.cgr.dev/java-remediated/`
 - Docker installed to run images
 ---
 
@@ -98,7 +98,7 @@ View the Java dependencies in the pom file:
 
 ```bash
 # Change Directory into the step1-orig folder
-cd cs-workshop/chainguard-libraries/java/step1-orig
+cd chainguard-libraries-java/step1-orig
 
 # Print only the <dependencies> section from pom.xml to see what the app depends on.
 awk '/<dependencies>/,/<\/dependencies>/' pom.xml
@@ -181,7 +181,7 @@ export CGR_MAVEN_PASS=$(echo $CREDS_OUTPUT | jq -r ".token")
 ```
 
 ### 2. Review `settings.xml`
-View the settings.xml file which shows that we are setting `https://libraries.cgr.dev/maven/` as the primary repo and keeping maven central as a fallback.  Notice that we are referencing the credentials as environment variables that will be passed in as docker build secrets when building the image.
+View the settings.xml file which shows that we are setting `https://libraries.cgr.dev/java-remediated/` as the primary repo and `https://libraries.cgr.dev/java/` as the second, with Maven Central disabled (`invalid` URL). The same repos are set under both `<repositories>` and `<pluginRepositories>`, since Maven resolves plugins and their dependencies (e.g. the Spring jars `spring-boot:repackage` bundles) through `<pluginRepositories>`.  Notice that we are referencing the credentials as environment variables that will be passed in as docker build secrets when building the image.
 
 ```bash
 # Show settings.xml, which references Chainguard’s Maven repo and uses your credentials.
@@ -196,10 +196,12 @@ cat settings.xml
 TAG="upstream-cg-libs"
 BUILDER_IMAGE="maven"
 RUNTIME_IMAGE="eclipse-temurin"
+# Settings path for the upstream Maven image (the Dockerfile defaults to the Chainguard Maven image path)
+MAVEN_SETTINGS_PATH="/usr/share/maven/conf/settings.xml"
 ```
 
 ### 4. Review the updated Dockerfile
-Notice here that we have modified the `RUN` statement for the build to reference the build secrets for the credentials to authenticate to `https://libraries.cgr.dev/maven/`. We also modified the maven command to `mvn clean package -U` the -U flag ignores the local cache to ensure we pick up all available dependencies from `https://libraries.cgr.dev/maven/`.
+Notice here that we have modified the `RUN` statement for the build to reference the build secrets for the credentials to authenticate to `https://libraries.cgr.dev/`. We also modified the maven command to `mvn clean package -U` the -U flag ignores the local cache to ensure we pick up all available dependencies from Chainguard Libraries. The Dockerfile defaults to the Chainguard Maven and JRE images, and to `/usr/share/java/maven/conf/settings.xml`, the path the Chainguard Maven image reads its settings from.
 
 ```bash
 # View the Dockerfile configured to use build secrets for credentials.
@@ -214,6 +216,7 @@ docker build \
   -t java-lib-example:$TAG \
   --build-arg BUILDER_IMAGE=$BUILDER_IMAGE \
   --build-arg RUNTIME_IMAGE=$RUNTIME_IMAGE \
+  --build-arg MAVEN_SETTINGS_PATH=$MAVEN_SETTINGS_PATH \
   --secret id=cgr_user,src=<(echo -n "$CGR_MAVEN_USER") \
   --secret id=cgr_pass,src=<(echo -n "$CGR_MAVEN_PASS") \
   -f ../step2-cg-build/Dockerfile .
@@ -245,6 +248,7 @@ docker stop java-lib-example-1 && docker rm java-lib-example-1 && rm java-demo-a
 ## 🧱 Step 3 — Full Chainguard Build
 This stage runs the full “secure supply chain” build: using Chainguard’s Maven image as the builder and Chainguard’s JRE as the runtime.
 The result is an application where the entire toolchain — builder, runtime, and dependencies — comes from Chainguard.
+There is no separate step3 folder: this step reuses `step2-cg-build/Dockerfile` from the `step1-orig` directory, changing only the builder and runtime images through build args.
 
 ### 1. Set variables
 When using the Chainguard Maven image we copy the settings.xml file to a different path from the runtime image due to the difference of where the default settings.xml file lives in the Chainguard Maven image.
@@ -347,4 +351,4 @@ docker image ls | grep java-lib-example | awk '{print $3}' | xargs docker image 
 - **Port conflicts:**  
   If port `8081` is in use, update the `docker run` command (e.g., `-p 8082:8080`).
 - **Maven Central fallback:**  
-  If a large number of dependencies still resolve from Maven Central, in the Chainguard builds, verify your `settings.xml`, credentials, and clear any Artifactory cache.
+  If a large number of dependencies still resolve from Maven Central, in the Chainguard builds, verify your `settings.xml`, credentials, and clear any Artifactory cache. If the build log shows no `libraries.cgr.dev` downloads at all, `settings.xml` was copied to a path the builder image does not read; check `MAVEN_SETTINGS_PATH`.
